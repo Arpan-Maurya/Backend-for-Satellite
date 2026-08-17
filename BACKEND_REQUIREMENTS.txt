@@ -1,0 +1,764 @@
+# BACKEND REQUIREMENTS & TECHNOLOGY STACK
+## Phase 1 MVP - Collision Risk Assessment System
+**For: AI-Driven Collision Risk Assessment for Mega-Constellation Satellites**
+
+---
+
+## **1. BACKEND ARCHITECTURE OVERVIEW**
+
+### **System Components (High-Level)**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   BACKEND SERVICES                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │ Data Intake  │→ │ Feature Eng  │→ │ ML Inference │     │
+│  │  Pipeline    │  │    Engine    │  │   Engine     │     │
+│  └──────────────┘  └──────────────┘  └──────────────┘     │
+│         ↓                ↓                  ↓              │
+│    (TLE Data)       (8 Features)      (MSD + Risk Prob)   │
+│                                                             │
+│  ┌────────────────────────────────────────────────────┐   │
+│  │         Risk Scoring & Alert Generation            │   │
+│  │  (Combined Score, Risk Tier, Alert JSON)           │   │
+│  └────────────────────────────────────────────────────┘   │
+│                         ↓                                  │
+│  ┌────────────────┐  ┌────────────────┐                   │
+│  │  REST API      │  │  WebSocket API │                   │
+│  │  (HTTP)        │  │  (Real-time)   │                   │
+│  └────────────────┘  └────────────────┘                   │
+│                         ↓                                  │
+│  ┌──────────────────────────────────────────────────────┐ │
+│  │         Frontend (Streamlit Dashboard)              │ │
+│  └──────────────────────────────────────────────────────┘ │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## **2. TECHNOLOGY STACK**
+
+### **2.1 Core Backend Framework**
+
+**Primary Option: Python + FastAPI**
+```
+WHY: 
+  ✓ Python ecosystem for ML/data science
+  ✓ Fast HTTP framework (competitive with Node.js)
+  ✓ Built-in async/await for real-time operations
+  ✓ Automatic API documentation (OpenAPI/Swagger)
+  ✓ Easy integration with ML models
+  ✓ WebSocket support for live updates
+  ✓ Lightweight deployment (Docker-friendly)
+
+ALTERNATIVE: Flask
+  • Simpler but slower than FastAPI
+  • Sufficient for MVP if performance not critical
+  • Requires manual API documentation
+  • WebSocket needs additional library (Flask-SocketIO)
+```
+
+**Version Requirements:**
+- Python: 3.9+ (for type hints, performance)
+- FastAPI: Latest stable (1.x or 2.x)
+- Uvicorn: Latest (ASGI server for FastAPI)
+
+---
+
+### **2.2 Data Ingestion Layer**
+
+**TLE Fetching & Parsing**
+```
+Technology Requirements:
+├─ HTTP Client Library
+│  ├─ requests (synchronous, simple)
+│  ├─ httpx (async-capable, modern)
+│  └─ aiohttp (fully async, high-performance)
+│
+├─ Data Parsing
+│  ├─ NORAD TLE Parser (built-in, custom)
+│  ├─ celeste (TLE-specific library)
+│  └─ poliastro (orbital mechanics library)
+│
+├─ Scheduling (for daily TLE updates)
+│  ├─ APScheduler (Python task scheduler)
+│  ├─ Celery (distributed task queue)
+│  └─ Cron jobs (system-level scheduling)
+│
+└─ Caching (to avoid repeated fetches)
+   ├─ Redis (in-memory cache)
+   ├─ SQLite (lightweight persistent cache)
+   └─ Python in-memory dict (MVP-only)
+
+RECOMMENDATION FOR MVP:
+  • httpx + poliastro for TLE ingestion
+  • APScheduler for daily refresh
+  • SQLite for caching previous results
+```
+
+**Data Source Integration:**
+- NORAD Celestrak API (free, daily updates)
+- Space-Track.org (optional, requires registration)
+- Direct TLE file downloads (manual fallback)
+
+---
+
+### **2.3 Feature Engineering Engine**
+
+**Requirements for Orbital Feature Computation**
+```
+Technology Stack:
+├─ Numerical Computation
+│  ├─ NumPy (array operations, fast computation)
+│  ├─ Pandas (data manipulation, DataFrame operations)
+│  └─ SciPy (scientific computing if needed)
+│
+├─ Orbital Mechanics Library
+│  ├─ Poliastro (primary - specifically designed for orbits)
+│  ├─ Skyfield (alternative - also robust)
+│  └─ SGP4 (if implementing propagation yourself)
+│
+├─ Data Validation
+│  ├─ Pydantic (type validation, data models)
+│  └─ marshmallow (serialization/deserialization)
+│
+└─ Performance Optimization
+   ├─ Numba (JIT compilation for NumPy code)
+   ├─ Cython (for critical sections if needed)
+   └─ Vectorization (avoid loops, use NumPy/Pandas)
+
+RECOMMENDATION FOR MVP:
+  • NumPy + Pandas (standard stack)
+  • Poliastro for orbital element extraction
+  • Pydantic for data validation
+  • Vectorized operations (avoid Numba unless bottleneck)
+```
+
+**Required Orbital Features to Compute:**
+1. Semi-major axis (a)
+2. Eccentricity (e)
+3. Inclination (i)
+4. RAAN (Ω)
+5. Argument of Perigee (ω)
+6. Mean Motion (n)
+
+From these → derive 8 engineered features (inc_diff, RAAN_diff, apogee_diff, etc.)
+
+---
+
+### **2.4 ML Model Inference Engine**
+
+**Requirements for Trained Model Loading & Prediction**
+```
+Technology Stack:
+├─ Model Serialization
+│  ├─ Pickle (.pkl files - standard for scikit-learn/XGBoost)
+│  ├─ ONNX (Open Neural Network Exchange format)
+│  └─ ModelProto (for cross-platform compatibility)
+│
+├─ Model Loading Library
+│  ├─ joblib (preferred for scikit-learn models)
+│  ├─ pickle (built-in Python)
+│  └─ onnxruntime (if using ONNX format)
+│
+├─ XGBoost Runtime
+│  ├─ XGBoost library (for inference)
+│  ├─ XGBoost Booster (pre-trained model object)
+│  └─ GPU support (optional, via xgboost[gpu])
+│
+├─ Prediction Caching (for repeated pairs)
+│  ├─ Redis (distributed cache)
+│  ├─ SQLite (local cache)
+│  └─ In-memory dict (MVP only)
+│
+└─ Performance Optimization
+   ├─ Batch prediction (process multiple pairs at once)
+   ├─ Model quantization (int8 for speed)
+   └─ GPU inference (optional, CUDA runtime)
+
+RECOMMENDATION FOR MVP:
+  • Pickle for model serialization
+  • joblib for loading
+  • XGBoost for inference
+  • In-memory cache (simple, fast for MVP)
+  • Batch prediction for scalability
+```
+
+**Model Requirements:**
+- Regressor: XGBoost trained model (predicts MSD in meters)
+- Classifier: XGBoost trained model (predicts collision risk binary)
+- Both models: Loaded at application startup (fast access)
+
+---
+
+### **2.5 Risk Scoring & Alert Engine**
+
+**Requirements for Combining Model Outputs**
+```
+Technology Stack:
+├─ Logic Engine
+│  ├─ Python if/else statements (simple)
+│  ├─ Decision trees (if complex logic needed)
+│  └─ Rule-based system (CLIPS or similar, if advanced)
+│
+├─ Risk Calculation
+│  ├─ NumPy (for mathematical operations)
+│  ├─ Python built-in (for basic math)
+│  └─ Formulas: (60% clf_prob + 40% normalized_regression)
+│
+├─ Risk Tier Classification
+│  ├─ Threshold-based rules (if MSD < 200 → CRITICAL)
+│  ├─ Probability rules (if P > 0.1 → CRITICAL)
+│  └─ Enum (for risk tier constants)
+│
+├─ Alert Generation
+│  ├─ JSON formatting (for API responses)
+│  ├─ Email alerting (optional, SMTP)
+│  ├─ SMS alerting (optional, Twilio API)
+│  └─ Logging (standard logging module)
+│
+└─ Notification Channels
+   ├─ REST API JSON response
+   ├─ WebSocket real-time push
+   ├─ Email (SMTP server)
+   └─ Database logging (for audit trail)
+
+RECOMMENDATION FOR MVP:
+  • Python logic + NumPy for risk scoring
+  • Threshold-based rules (simple, fast)
+  • JSON formatting (standard for APIs)
+  • Logging module (built-in, sufficient)
+  • WebSocket for real-time to Streamlit
+```
+
+---
+
+### **2.6 API Layer & Data Serialization**
+
+**REST API & WebSocket Requirements**
+```
+Technology Stack:
+├─ Web Framework
+│  ├─ FastAPI (recommended - async, modern)
+│  ├─ Flask (alternative - simpler but slower)
+│  └─ Starlette (if building custom async framework)
+│
+├─ HTTP Server (ASGI)
+│  ├─ Uvicorn (recommended for FastAPI)
+│  ├─ Hypercorn (alternative, full ASGI support)
+│  └─ Daphne (if using Django)
+│
+├─ Data Serialization
+│  ├─ JSON (standard REST API format)
+│  ├─ Pydantic (models with validation)
+│  ├─ Marshmallow (alternative serializer)
+│  └─ Protocol Buffers (if ultra-fast needed)
+│
+├─ WebSocket Support
+│  ├─ FastAPI WebSocket (built-in)
+│  ├─ websockets library (if standalone)
+│  └─ Socket.io (if using Flask)
+│
+├─ API Documentation
+│  ├─ OpenAPI 3.0 (automatic via FastAPI)
+│  ├─ Swagger UI (auto-generated)
+│  └─ ReDoc (alternative documentation UI)
+│
+├─ Rate Limiting
+│  ├─ slowapi (for FastAPI)
+│  ├─ Flask-Limiter (for Flask)
+│  └─ Custom middleware (if needed)
+│
+└─ CORS Support
+   ├─ fastapi.middleware.cors (built-in)
+   ├─ Flask-CORS (for Flask)
+   └─ Manual header handling
+
+RECOMMENDED STACK:
+  • FastAPI + Uvicorn (primary)
+  • Pydantic for data validation
+  • Native WebSocket support
+  • JSON serialization
+```
+
+**API Endpoints Required (MVP):**
+```
+POST /risk/assess
+├─ Input: satellite_1_tle, satellite_2_tle
+└─ Output: MSD, P(collision), risk_tier, risk_score
+
+GET /risk/top-conjunctions
+├─ Input: limit (e.g., 100)
+└─ Output: Array of top 100 high-risk pairs
+
+GET /health
+├─ Input: none
+└─ Output: {"status": "healthy", "version": "1.0"}
+
+WebSocket /ws/live-risks
+├─ Input: connection
+└─ Output: Real-time risk updates (streaming)
+```
+
+---
+
+### **2.7 Database Layer**
+
+**Persistent Storage Requirements**
+```
+Technology Stack:
+├─ Primary Database (for historical data)
+│  ├─ SQLite (MVP - lightweight, file-based)
+│  ├─ PostgreSQL (production - robust, scalable)
+│  └─ MongoDB (if document-based storage needed)
+│
+├─ ORM/Query Layer
+│  ├─ SQLAlchemy (ORM for SQL databases)
+│  ├─ Tortoise ORM (async ORM for Python)
+│  ├─ Pydantic (lightweight data models)
+│  └─ Raw SQL (if minimal abstraction needed)
+│
+├─ Cache Database
+│  ├─ Redis (distributed cache, sessions)
+│  ├─ SQLite (lightweight local cache)
+│  └─ In-memory dict (MVP only, not persistent)
+│
+└─ Schema Design
+   ├─ TLE_RECORDS table (store fetched TLEs)
+   ├─ CONJUNCTION_PAIRS table (store assessments)
+   ├─ RISK_ALERTS table (store high-risk pairs)
+   └─ MODEL_METADATA table (track model versions)
+
+RECOMMENDATION FOR MVP:
+  • SQLite for development/testing
+  • Minimal schema (3-4 tables)
+  • No complex relationships
+  • Simple queries (no joins)
+```
+
+**Tables Needed (MVP):**
+```
+SATELLITES:
+  - id, norad_id, name, tle_line1, tle_line2, epoch_datetime
+
+CONJUNCTION_ASSESSMENTS:
+  - id, sat1_id, sat2_id, msd_predicted, collision_prob, 
+    risk_tier, risk_score, timestamp, model_version
+
+RISK_ALERTS:
+  - id, sat1_id, sat2_id, risk_tier, created_at, acknowledged_by
+```
+
+---
+
+### **2.8 Monitoring & Logging**
+
+**Requirements for Production Visibility**
+```
+Technology Stack:
+├─ Logging Framework
+│  ├─ Python logging (built-in, standard)
+│  ├─ loguru (more flexible alternative)
+│  ├─ structlog (structured logging)
+│  └─ Sentry (error tracking, optional)
+│
+├─ Log Levels
+│  ├─ DEBUG (detailed operational info)
+│  ├─ INFO (general operational events)
+│  ├─ WARNING (unusual but handled)
+│  ├─ ERROR (errors requiring attention)
+│  └─ CRITICAL (system failure)
+│
+├─ Log Output
+│  ├─ Console (stdout for development)
+│  ├─ File (for persistence)
+│  ├─ Syslog (for system integration)
+│  └─ Cloud logging (CloudWatch, Stackdriver)
+│
+├─ Performance Monitoring
+│  ├─ Python timeit (for benchmarking)
+│  ├─ cProfile (for profiling)
+│  └─ Custom metrics (inference time, cache hit rate)
+│
+└─ Health Checks
+   ├─ Liveness probe (is service running?)
+   ├─ Readiness probe (is service ready for requests?)
+   └─ Database connectivity check
+
+RECOMMENDATION FOR MVP:
+  • Python logging module (built-in)
+  • File-based logs (rotating file handler)
+  • Minimal overhead (no external services)
+  • console + file output
+```
+
+---
+
+### **2.9 Containerization & Deployment**
+
+**Requirements for Production Deployment**
+```
+Technology Stack:
+├─ Container Runtime
+│  ├─ Docker (standard containerization)
+│  └─ Docker Compose (multi-container orchestration)
+│
+├─ Deployment Platforms
+│  ├─ Heroku (simplest, free tier available)
+│  ├─ AWS (ECS, EC2, Lambda)
+│  ├─ Google Cloud (Cloud Run, App Engine)
+│  ├─ Azure (App Service, Container Instances)
+│  └─ DigitalOcean (affordable, simple)
+│
+├─ Cloud-Ready Features
+│  ├─ Environment variables (config management)
+│  ├─ Health check endpoints
+│  ├─ Graceful shutdown handling
+│  └─ Stateless design (no local file dependencies)
+│
+├─ Infrastructure as Code
+│  ├─ Dockerfile (container definition)
+│  ├─ docker-compose.yml (local multi-container)
+│  ├─ Terraform (cloud infrastructure)
+│  └─ CloudFormation (AWS-specific)
+│
+└─ CI/CD Pipeline
+   ├─ GitHub Actions (free for public repos)
+   ├─ Jenkins (self-hosted)
+   ├─ GitLab CI (built-in)
+   └─ Cloud Build (GCP, AWS CodeBuild)
+
+RECOMMENDATION FOR MVP:
+  • Docker + Heroku (simplest deployment)
+  • GitHub Actions for CI/CD
+  • Environment variables for config
+  • No complex orchestration (Kubernetes overkill)
+```
+
+---
+
+## **3. PERFORMANCE REQUIREMENTS**
+
+### **Latency Targets**
+
+```
+TLE Fetch & Parse:
+  ├─ NORAD fetch: 500-1000ms (network I/O)
+  ├─ TLE parsing: 100-200ms (2000+ satellites)
+  └─ Total: 1-2 seconds for fresh data
+
+Feature Engineering (Per Pair):
+  ├─ Target: <1ms per satellite pair
+  ├─ For 2000 satellites: ~2 seconds (for all 2M pairs)
+  └─ Vectorized operations required
+
+Model Inference (Per Pair):
+  ├─ Regressor prediction: <0.5ms
+  ├─ Classifier prediction: <0.5ms
+  └─ Total: <1ms per pair (TARGET MET ✓)
+
+Risk Scoring (Per Pair):
+  ├─ Calculation + tier assignment: <0.1ms
+  └─ Total: <1ms per pair
+
+Full Pipeline (2000 satellites = 2M pairs):
+  ├─ Best case: 11 seconds
+  ├─ Acceptable: <30 seconds
+  └─ Maximum: <60 seconds
+```
+
+### **Throughput Requirements**
+
+```
+Concurrent Requests:
+  ├─ Minimum: 10 concurrent requests
+  ├─ Target: 50+ concurrent requests
+  └─ Peak: Handle 100+ without degradation
+
+Pairs Per Request:
+  ├─ Single assessment: <1ms
+  ├─ Top 100 risks: <100ms (batch)
+  └─ Full constellation: <30 seconds
+
+Scalability:
+  ├─ Current: 2,000 satellites (2M pairs)
+  ├─ Future: 10,000 satellites (50M pairs)
+  └─ Design for 3x headroom
+
+
+## **4. DATA FLOW ARCHITECTURE**
+
+### **Complete Backend Data Flow**
+
+```
+1. TLE INGESTION (Scheduled Daily)
+   ├─ Fetch from NORAD Celestrak API
+   ├─ Parse NORAD TLE format
+   ├─ Extract orbital elements (a, e, i, Ω, ω, n)
+   ├─ Cache in SQLite
+   └─ Ready for feature extraction
+
+2. API REQUEST RECEIVED
+   ├─ POST /risk/assess with TLE data
+   ├─ Validate input (Pydantic models)
+   ├─ Check cache (recent assessments?)
+   └─ Proceed if not cached
+
+3. FEATURE ENGINEERING
+   ├─ Compute 8 orbital features
+   ├─ Vectorize if batch request
+   ├─ Validate feature ranges
+   └─ Pass to model inference
+
+4. MODEL INFERENCE
+   ├─ Regressor: Predict MSD (meters)
+   ├─ Classifier: Predict P(collision)
+   ├─ Get prediction + confidence
+   └─ Both outputs ready
+
+5. RISK SCORING
+   ├─ Combine: 60% clf + 40% regression
+   ├─ Normalize scores (0-1)
+   ├─ Assign risk tier (CRITICAL/HIGH/MEDIUM/LOW)
+   ├─ Create alert JSON
+   └─ Cache result
+
+6. API RESPONSE
+   ├─ Return JSON with all metrics
+   ├─ Status: 200 OK
+   ├─ Include prediction confidence
+   └─ Optional: Push to WebSocket
+
+7. STORAGE (Optional)
+   ├─ Log to database
+   ├─ Store in cache
+   ├─ Create audit trail
+   └─ Ready for next request
+```
+
+---
+
+## **5. INTEGRATION REQUIREMENTS**
+
+### **Frontend Integration (Streamlit)**
+
+```
+Frontend Calls Backend Via:
+├─ REST API (HTTP requests)
+│  ├─ POST /risk/assess (single assessment)
+│  └─ GET /risk/top-conjunctions (batch)
+│
+├─ WebSocket Connection
+│  └─ /ws/live-risks (real-time updates)
+│
+└─ Expected Response Format
+   ├─ JSON with MSD, P(collision), risk_tier
+   └─ Timestamps, model_version, confidence
+```
+
+### **Model Integration**
+
+```
+Pre-trained Models Required:
+├─ collision_msd_regressor.pkl
+│  ├─ Input: 8 features
+│  ├─ Output: MSD in meters
+│  └─ Trained via: 03_model_training.py
+│
+└─ collision_risk_classifier.pkl
+   ├─ Input: 8 features
+   ├─ Output: Probability (0-1)
+   └─ Trained via: 03_model_training.py
+```
+
+---
+
+## **6. SECURITY REQUIREMENTS**
+
+### **Backend Security Considerations**
+
+```
+Input Validation:
+  ├─ Pydantic models (type checking)
+  ├─ Range checks (TLE values valid?)
+  ├─ Injection prevention (no SQL injection)
+  └─ Rate limiting (prevent DDoS)
+
+Data Security:
+  ├─ No sensitive data storage
+  ├─ TLE data is public (NORAD)
+  ├─ Encrypted logs (if storing alerts)
+  └─ Environment variables for secrets
+
+API Security:
+  ├─ HTTPS only (in production)
+  ├─ CORS headers (allow Streamlit frontend only)
+  ├─ API key optional (for public MVP)
+  └─ No authentication (for MVP simplicity)
+
+Error Handling:
+  ├─ Generic error messages (don't expose internals)
+  ├─ Logging (detailed, for debugging)
+  ├─ Graceful degradation (fallback responses)
+  └─ Health checks (uptime monitoring)
+```
+
+---
+
+## **7. CONFIGURATION MANAGEMENT**
+
+### **Backend Configuration Requirements**
+
+```
+Environment Variables Needed:
+├─ NORAD_TLE_URL (Celestrak API endpoint)
+├─ DATABASE_URL (SQLite or PostgreSQL)
+├─ CACHE_TTL (time-to-live for cached results)
+├─ MODEL_PATH (path to trained models)
+├─ LOG_LEVEL (DEBUG, INFO, WARNING, ERROR)
+├─ BATCH_SIZE (for feature engineering)
+├─ MAX_WORKERS (for concurrent processing)
+├─ FRONTEND_URL (for CORS whitelist)
+└─ ENVIRONMENT (development, staging, production)
+
+Configuration File Format:
+├─ .env (for development)
+├─ config.yaml (for structured config)
+├─ secrets.json (for sensitive values)
+└─ Environment variables (for cloud deployment)
+```
+
+---
+
+## **8. ERROR HANDLING & RESILIENCE**
+
+### **Backend Resilience Requirements**
+
+```
+Network Failures:
+  ├─ TLE fetch fails → Use cached TLEs
+  ├─ Database down → Return cached result
+  ├─ Model load fails → Return error with status 503
+  └─ Retry logic (exponential backoff)
+
+Data Validation Failures:
+  ├─ Invalid TLE format → Return 400 Bad Request
+  ├─ Missing features → Return 422 Unprocessable Entity
+  ├─ Out-of-range values → Return 400 Bad Request
+  └─ Model predictions fail → Return 500 Server Error
+
+Performance Degradation:
+  ├─ Inference slow → Still serve with latency warning
+  ├─ Cache hit → Return instant response
+  ├─ Batch processing → Timeout after 60 seconds
+  └─ Graceful shutdown (finish requests in-flight)
+
+Monitoring & Alerts:
+  ├─ Error rate > 5% → Alert operations
+  ├─ Response time > 5s → Log warning
+  ├─ Model inference fails → Critical alert
+  └─ Database connectivity lost → Immediate alert
+```
+
+---
+
+## **9. SCALABILITY CONSIDERATIONS**
+
+### **Backend Scalability Path**
+
+```
+MVP (Phase 1 - Week 1):
+  ├─ Single process (no horizontal scaling)
+  ├─ SQLite (no database scaling)
+  ├─ In-memory cache (no distributed cache)
+  └─ Capacity: 2000 satellites (2M pairs)
+
+Phase 2 Scaling (Weeks 2-3):
+  ├─ Multiple worker processes
+  ├─ Redis for distributed cache
+  ├─ PostgreSQL for persistence
+  └─ Capacity: 5000 satellites (25M pairs)
+
+Phase 3 Production (Weeks 4-8):
+  ├─ Load balancing (multiple instances)
+  ├─ Kubernetes orchestration (optional)
+  ├─ Cloud database (RDS, CloudSQL)
+  ├─ CDN for static assets
+  └─ Capacity: 10000+ satellites (100M+ pairs)
+```
+
+---
+
+## **10. TESTING REQUIREMENTS**
+
+### **Backend Testing Strategy**
+
+```
+Unit Tests:
+  ├─ Feature extraction functions
+  ├─ Risk scoring logic
+  ├─ Data validation (Pydantic)
+  ├─ Helper utilities
+  └─ Target: >80% code coverage
+
+Integration Tests:
+  ├─ API endpoints (all routes)
+  ├─ Database operations (CRUD)
+  ├─ Model inference pipeline
+  ├─ Cache behavior
+  └─ Error handling paths
+
+Performance Tests:
+  ├─ Inference latency (<1ms per pair)
+  ├─ Throughput (pairs per second)
+  ├─ Memory usage (steady-state)
+  ├─ Cache effectiveness
+  └─ Batch processing time
+
+Load Tests:
+  ├─ 10 concurrent requests
+  ├─ 50 concurrent requests
+  ├─ Sustained load (30 minutes)
+  ├─ Response time under load
+  └─ No memory leaks
+```
+
+---
+
+## **SUMMARY TABLE: Backend Requirements**
+
+| Component | Technology | Purpose | MVP Requirement |
+|-----------|-----------|---------|-----------------|
+| **Framework** | FastAPI + Uvicorn | Web service | Required |
+| **Language** | Python 3.9+ | Implementation | Required |
+| **Data Intake** | Poliastro + httpx | TLE fetching | Required |
+| **Features** | NumPy + Pandas | Feature engineering | Required |
+| **Models** | XGBoost | ML inference | Required |
+| **Scoring** | Python logic | Risk calculation | Required |
+| **API** | FastAPI REST | HTTP endpoints | Required |
+| **WebSocket** | FastAPI WS | Real-time push | Optional (Phase 1) |
+| **Database** | SQLite | Persistence | Optional (Phase 1) |
+| **Cache** | In-memory dict | Performance | Optional (Phase 1) |
+| **Logging** | Python logging | Debugging | Required |
+| **Deployment** | Docker | Containerization | Required |
+| **CI/CD** | GitHub Actions | Automation | Required |
+
+---
+
+## **KEY DECISION: What's MUST-HAVE vs OPTIONAL for MVP**
+
+### **MUST-HAVE (for Phase 1 working demo):**
+✅ Python 3.9+  
+✅ FastAPI framework  
+✅ TLE parsing (Poliastro)  
+✅ Feature engineering (NumPy)  
+✅ Model loading (XGBoost)  
+✅ Risk scoring logic  
+✅ REST API endpoints  
+✅ JSON responses  
+✅ Basic logging  
+✅ Docker container  
+

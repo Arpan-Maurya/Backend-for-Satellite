@@ -1,0 +1,47 @@
+# Environment & Secrets
+.env
+.env.local
+.env.production
+secrets.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ML model files (large binaries)
+models/*.pkl
+models/*.joblib
+models/*.onnx
+!models/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Docker
+.dockerignore

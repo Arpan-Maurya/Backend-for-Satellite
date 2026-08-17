@@ -1,0 +1,38 @@
+# Core framework
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+pydantic==2.11.3
+pydantic-settings==2.9.1
+
+# HTTP client
+httpx==0.28.1
+
+# Data processing
+numpy==2.2.6
+pandas==2.3.0
+
+# Orbital mechanics
+sgp4==2.24
+
+# ML
+xgboost==3.0.2
+joblib==1.5.1
+scikit-learn==1.7.0
+
+# Database
+supabase==2.15.2
+
+# Environment & config
+python-dotenv==1.1.0
+
+# Security
+slowapi==0.1.9
+
+# Testing
+pytest==8.4.1
+pytest-asyncio==1.0.0
+pytest-cov==7.1.0
+httpx  # already listed, also used in tests
+
+# WebSocket (included in uvicorn[standard])
+websockets==15.0.1
